@@ -15,7 +15,7 @@ defmodule Pushy.MixProject do
   def application do
     [
       mod: {Pushy, []},
-      extra_applications: [:logger]
+      extra_applications: [:logger, :crypto]
     ]
   end
 
@@ -26,7 +26,7 @@ defmodule Pushy.MixProject do
       {:jason, "~> 1.2.2"},
       {:uuid, "~> 1.1.8"},
       {:phoenix_pubsub, "~> 2.0.0"},
-      {:joken, "~> 2.0.0"}
+      {:joken, "~> 2.0.0"},
     ]
   end
 end

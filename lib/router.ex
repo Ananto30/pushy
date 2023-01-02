@@ -1,9 +1,13 @@
 defmodule Pushy.Router do
   import Plug.Conn
+
   use Plug.Router
+  use Plug.ErrorHandler
+
   require Logger
 
   plug(:match)
+  plug(Plug.Logger)
   plug(Pushy.Auth)
   plug(Plug.Parsers, parsers: [:json], pass: ["application/json"], json_decoder: Jason)
   plug(:dispatch)
@@ -25,26 +29,42 @@ defmodule Pushy.Router do
     receiver_loop(conn)
   end
 
-  post "/publish" do
-    channel = parse_param(conn, "channel")
-    data = parse_param(conn, "data")
-    event = make_event(data)
-
-    case Phoenix.PubSub.broadcast(Pushy.PubSub, channel, {:sse, event}) do
+  post "/publish/:channel" do
+    case parse_param(conn, "data")
+         |> make_event()
+         |> send_event(channel) do
       :ok ->
         conn
-        |> send_resp(200, "OK")
+        |> send_resp(200, "")
 
       {:error, reason} ->
         conn
-        |> send_resp(500, "Error: #{reason}")
+        |> send_resp(500, err_json(reason))
     end
   end
 
-  defp make_event(data) do
-    data = Jason.encode!(data)
-    uuid = UUID.uuid4()
-    "event: message\ndata: #{data}\nid: #{uuid}\nretry: 6000\n\n"
+  @impl Plug.ErrorHandler
+  def handle_errors(conn, %{kind: _kind, reason: reason, stack: stack}) do
+    Logger.error(beautify_stack(stack))
+
+    case reason do
+      %Plug.Parsers.UnsupportedMediaTypeError{} ->
+        send_resp(conn, 415, err_json("Unsupported media type"))
+
+      %Plug.Parsers.ParseError{} ->
+        send_resp(conn, 400, err_json("Invalid JSON"))
+    end
+  end
+
+  defp parse_param(conn, param) do
+    case Map.get(conn.params, param) do
+      nil ->
+        conn
+        |> send_resp(400, err_json("Missing parameter: #{param}"))
+
+      value ->
+        value
+    end
   end
 
   defp receiver_loop(conn) do
@@ -58,14 +78,22 @@ defmodule Pushy.Router do
     end
   end
 
-  defp parse_param(conn, param) do
-    case Map.get(conn.params, param) do
-      nil ->
-        conn
-        |> send_resp(400, "Missing parameter: #{param}")
+  defp make_event(data) do
+    data = Jason.encode!(data)
+    uuid = UUID.uuid4()
+    "event: message\ndata: #{data}\nid: #{uuid}\nretry: 100\n\n"
+  end
 
-      value ->
-        value
-    end
+  defp send_event(event, channel) do
+    Phoenix.PubSub.broadcast(Pushy.PubSub, channel, {:sse, event})
+  end
+
+  defp err_json(reason) do
+    Jason.encode!(%{message: reason})
+  end
+
+  defp beautify_stack(stack) do
+    stack
+    |> Exception.format_stacktrace()
   end
 end
