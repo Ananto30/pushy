@@ -58,7 +58,7 @@ mix run -e "{:ok, token} = Pushy.Auth.make_token(%{user_id: 1}); IO.puts(\"Gener
 
 To listen to channels, make an HTTP POST request to `/sse` with the channel names in the body.
 
-Example using [script](/example/listen.sh):
+Example using [script](/example/listen.exs):
 
 ```sh
 elixir example/listen.exs
@@ -70,7 +70,7 @@ elixir example/listen.exs
 
 To post an event to a channel, make an HTTP POST request to `/publish/:channel_name` with the event data in the request body.
 
-Example using [script](/example/publish.sh):
+Example using [script](/example/publish.exs):
 
 ```sh
 elixir example/publish.exs
