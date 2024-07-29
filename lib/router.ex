@@ -1,9 +1,7 @@
 defmodule Pushy.Router do
   import Plug.Conn
-
   use Plug.Router
   use Plug.ErrorHandler
-
   require Logger
 
   plug(:match)
@@ -13,61 +11,105 @@ defmodule Pushy.Router do
   plug(:dispatch)
 
   post "/sse" do
-    channels = parse_param(conn, "channels")
-
-    conn =
-      conn
-      |> put_resp_header("content-type", "text/event-stream")
-      |> put_resp_header("cache-control", "no-cache")
-      |> put_resp_header("connection", "keep-alive")
-      |> send_chunked(200)
-
-    Enum.each(channels, fn channel ->
-      Phoenix.PubSub.subscribe(Pushy.PubSub, channel)
-    end)
-
-    receiver_loop(conn)
+    conn
+    |> handle_sse_request()
   end
 
   post "/publish/:channel" do
-    case parse_param(conn, "data")
-         |> make_event()
-         |> send_event(channel) do
-      :ok ->
-        conn
-        |> send_resp(200, "")
+    conn
+    |> handle_publish_request(channel)
+  end
 
-      {:error, reason} ->
-        conn
-        |> send_resp(500, err_json(reason))
-    end
+  match _ do
+    send_resp(conn, 404, "Not found")
   end
 
   @impl Plug.ErrorHandler
   def handle_errors(conn, %{kind: _kind, reason: reason, stack: stack}) do
     Logger.error(beautify_stack(stack))
 
-    case reason do
-      %Plug.Parsers.UnsupportedMediaTypeError{} ->
-        send_resp(conn, 415, err_json("Unsupported media type"))
+    conn
+    |> handle_error_response(reason)
+  end
 
-      %Plug.Parsers.ParseError{} ->
-        send_resp(conn, 400, err_json("Invalid JSON"))
-    end
+  defp handle_error_response(conn, %Plug.Parsers.UnsupportedMediaTypeError{}) do
+    send_resp(conn, 415, err_json("Unsupported media type"))
+  end
+
+  defp handle_error_response(conn, %Plug.Parsers.ParseError{}) do
+    send_resp(conn, 400, err_json("Invalid JSON"))
+  end
+
+  defp handle_error_response(conn, _reason) do
+    send_resp(conn, 500, err_json("Internal server error"))
   end
 
   defp parse_param(conn, param) do
-    case Map.get(conn.params, param) do
-      nil ->
-        conn
-        |> send_resp(400, err_json("Missing parameter: #{param}"))
+    params = conn.params || %{}
 
-      value ->
-        value
+    case Map.get(params, param) do
+      nil -> {:error, "Missing parameter: #{param}"}
+      "" -> {:error, "Empty parameter: #{param}"}
+      value -> {:ok, value}
     end
   end
 
+  defp handle_sse_request(conn) do
+    conn
+    |> parse_channels()
+    |> case do
+      {:ok, channels} ->
+        conn
+        |> prepare_sse_response()
+        |> subscribe_and_loop(channels)
+
+      {:error, message} ->
+        send_resp(conn, 400, err_json(message))
+    end
+  end
+
+  defp parse_channels(conn) do
+    case parse_param(conn, "channels") do
+      {:ok, channels} when is_list(channels) -> {:ok, channels}
+      {:ok, channel} -> {:ok, [channel]}
+      {:error, message} -> {:error, message}
+    end
+  end
+
+  defp prepare_sse_response(conn) do
+    conn
+    |> put_resp_header("content-type", "text/event-stream")
+    |> put_resp_header("cache-control", "no-cache")
+    |> put_resp_header("connection", "keep-alive")
+    |> send_chunked(200)
+  end
+
+  defp subscribe_and_loop(conn, channels) do
+    conn
+    |> subscribe_to_channels(channels)
+    |> receiver_loop()
+  end
+
+  defp subscribe_to_channels(conn, channels) do
+    # Subscribe to each channel
+    # This will allow the connection to receive messages
+    # from the subscribed channels
+    # The connection will be kept alive until the client disconnects
+    # or the server closes the connection
+    Enum.each(channels, fn channel ->
+      Phoenix.PubSub.subscribe(Pushy.PubSub, channel)
+    end)
+
+    Logger.info("Subscribed to channels: #{inspect(channels)}")
+
+    conn
+  end
+
   defp receiver_loop(conn) do
+    # This is a tail-recursive function
+    # that will keep the connection open
+    # until the client disconnects
+    # or the server closes the connection
     receive do
       {:sse, data} ->
         chunk(conn, data)
@@ -76,6 +118,33 @@ defmodule Pushy.Router do
       _ ->
         receiver_loop(conn)
     end
+  end
+
+  defp handle_publish_request(conn, channel) do
+    case parse_param(conn, "data") do
+      {:ok, data} -> handle_publish(conn, channel, data)
+      {:error, message} -> send_resp(conn, 400, err_json(message))
+    end
+  end
+
+  defp handle_publish(conn, channel, data) do
+    data
+    |> add_timestamp()
+    |> make_event()
+    |> send_event(channel)
+    |> handle_event_response(conn)
+  end
+
+  defp add_timestamp(data) do
+    Map.put(data, "timestamp", :os.system_time(:seconds))
+  end
+
+  defp handle_event_response(:ok, conn) do
+    send_resp(conn, 200, "")
+  end
+
+  defp handle_event_response({:error, reason}, conn) do
+    send_resp(conn, 500, err_json(reason))
   end
 
   defp make_event(data) do
@@ -88,12 +157,11 @@ defmodule Pushy.Router do
     Phoenix.PubSub.broadcast(Pushy.PubSub, channel, {:sse, event})
   end
 
-  defp err_json(reason) do
-    Jason.encode!(%{message: reason})
+  defp err_json(message) do
+    Jason.encode!(%{error: message})
   end
 
   defp beautify_stack(stack) do
-    stack
-    |> Exception.format_stacktrace()
+    Enum.map(stack, &Exception.format_stacktrace_entry/1) |> Enum.join("\n")
   end
 end

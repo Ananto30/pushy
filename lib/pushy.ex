@@ -1,6 +1,8 @@
 defmodule Pushy do
   use Application
 
+  require Logger
+
   def start(_type, _args) do
     children = [
       Plug.Cowboy.child_spec(
@@ -13,6 +15,10 @@ defmodule Pushy do
     ]
 
     opts = [strategy: :one_for_one, name: Pushy.Supervisor]
-    Supervisor.start_link(children, opts)
+    result = Supervisor.start_link(children, opts)
+
+    Logger.info("Server started at http://localhost:4000")
+
+    result
   end
 end

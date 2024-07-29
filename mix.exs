@@ -27,6 +27,7 @@ defmodule Pushy.MixProject do
       {:uuid, "~> 1.1.8"},
       {:phoenix_pubsub, "~> 2.0.0"},
       {:joken, "~> 2.0.0"},
+      {:httpoison, "~> 1.8", only: :test}
     ]
   end
 end
