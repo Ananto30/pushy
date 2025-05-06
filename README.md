@@ -2,12 +2,12 @@
 
 Pushy is a simple server to send SSE (Server-Sent Events) to HTTP clients. It allows you to listen to a list of channels and post events to them.
 
-## Requirements
+## 📋 Requirements
 
 * Elixir ~> 1.12
 * Erlang/OTP 23+
 
-## Installation
+## 🚀 Installation
 
 1. Clone the repository:
 
@@ -28,7 +28,7 @@ Pushy is a simple server to send SSE (Server-Sent Events) to HTTP clients. It al
    mix compile
    ```
 
-## Running the Server
+## 🏃‍♀️ Running the Server
 
 To start the server, set environment variables for the `AUTH_SECRET_KEY`
 
@@ -44,7 +44,7 @@ mix run --no-halt
 
 The server will start on port 4000 by default.
 
-## Usage
+## 📖 Usage
 
 ### Auth Token
 
@@ -78,7 +78,7 @@ elixir example/publish.exs
 
 \*\* Update the token in the file before running the script.
 
-## Testing
+## 🧪 Testing
 
 To run the tests, execute:
 
@@ -86,7 +86,7 @@ To run the tests, execute:
 mix test
 ```
 
-## Docker Instructions
+## 🐳 Docker Instructions
 
 ### Building the Docker Image
 
@@ -108,7 +108,7 @@ docker run -p 4000:4000 pushy:latest
 
 The server will start on port 4000 inside the container and will be exposed on port 4000 on your host machine.
 
-## Dependencies
+## 📦 Dependencies
 
 Pushy uses the following dependencies:
 
@@ -118,6 +118,7 @@ Pushy uses the following dependencies:
 * `phoenix_pubsub` - A distributed PubSub system for Phoenix
 * `joken` - A JSON Web Token (JWT) library for Elixir
 
-## License
+## 📄 License
 
 This project is licensed under the MIT License.
+
